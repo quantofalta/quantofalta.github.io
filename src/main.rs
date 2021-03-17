@@ -103,7 +103,7 @@ fn get_brazil_immunization_estimate(total_vaccinations: u32, daily_vaccinations:
     // https://ftp.ibge.gov.br/Estimativas_de_Populacao/Estimativas_2020/POP2020_20210204.pdf
     const BRAZIL_POPULATION: u32 = 211755692;
     let herd_size = (BRAZIL_POPULATION * 7) / 10;
-    let doses = std::cmp::min(herd_size * 2 - total_vaccinations, 0);
+    let doses = std::cmp::max(herd_size * 2 - total_vaccinations, 0);
     let days = doses / daily_vaccinations;
     return chrono::Duration::days(days.into());
 }
@@ -111,7 +111,6 @@ fn get_brazil_immunization_estimate(total_vaccinations: u32, daily_vaccinations:
 fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
     let end = now + estimate;
     let components = date_component::calculate(&now, &end);
-    println!("{:?} {:?}", end, components);
     let mut vec: Vec<String> = Vec::new();
     if components.year > 0 {
         vec.push(format!(
@@ -144,7 +143,10 @@ fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duratio
         3 => format!("{}, {} e {}", vec[0], vec[1], vec[2]),
         _ => unreachable!()
     };
-    return s;
+    if vec.len() == 1 && &vec[0][0..1] == "1" {
+        return format!("falta {}", s);
+    }
+    return format!("faltam {}", s);
 }
 
 // fn test_json() {
@@ -194,24 +196,24 @@ mod tests {
     fn format_estimate_works() {
         let start = chrono::Utc.ymd(2021, 3, 16).and_hms(0, 0, 0);
         let r = format_estimate(start, chrono::Duration::days(1));
-        assert_eq!(r, "1 dia");
+        assert_eq!(r, "falta 1 dia");
         let r = format_estimate(start, chrono::Duration::days(2));
-        assert_eq!(r, "2 dias");
+        assert_eq!(r, "faltam 2 dias");
         let r = format_estimate(start, chrono::Duration::days(31));
-        assert_eq!(r, "1 mês");
+        assert_eq!(r, "falta 1 mês");
         let r = format_estimate(start, chrono::Duration::days(32));
-        assert_eq!(r, "1 mês e 1 dia");
+        assert_eq!(r, "faltam 1 mês e 1 dia");
         let r = format_estimate(start, chrono::Duration::days(33));
-        assert_eq!(r, "1 mês e 2 dias");
+        assert_eq!(r, "faltam 1 mês e 2 dias");
         let r = format_estimate(start, chrono::Duration::days(31 + 30));
-        assert_eq!(r, "2 meses");
+        assert_eq!(r, "faltam 2 meses");
         let r = format_estimate(start, chrono::Duration::days(365));
-        assert_eq!(r, "1 ano");
+        assert_eq!(r, "falta 1 ano");
         let r = format_estimate(start, chrono::Duration::days(365 + 31));
-        assert_eq!(r, "1 ano e 1 mês");
+        assert_eq!(r, "faltam 1 ano e 1 mês");
         let r = format_estimate(start, chrono::Duration::days(365 + 31 + 1));
-        assert_eq!(r, "1 ano, 1 mês e 1 dia");
+        assert_eq!(r, "faltam 1 ano, 1 mês e 1 dia");
         let r = format_estimate(start, chrono::Duration::days(365 * 2 + 31 + 1));
-        assert_eq!(r, "2 anos, 1 mês e 1 dia");
+        assert_eq!(r, "faltam 2 anos, 1 mês e 1 dia");
     }
 }
