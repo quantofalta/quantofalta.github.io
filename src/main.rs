@@ -99,11 +99,11 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     Ok(last_daily_vaccinations.ok_or(anyhow!("No daily vaccinations found"))?)
 }
 
-fn get_brazil_immunization_estimate(daily_vaccinations: u32) -> chrono::Duration {
+fn get_brazil_immunization_estimate(total_vaccinations: u32, daily_vaccinations: u32) -> chrono::Duration {
     // https://ftp.ibge.gov.br/Estimativas_de_Populacao/Estimativas_2020/POP2020_20210204.pdf
     const BRAZIL_POPULATION: u32 = 211755692;
     let herd_size = (BRAZIL_POPULATION * 7) / 10;
-    let doses = herd_size * 2;
+    let doses = std::cmp::min(herd_size * 2 - total_vaccinations, 0);
     let days = doses / daily_vaccinations;
     return chrono::Duration::days(days.into());
 }
@@ -184,8 +184,10 @@ mod tests {
 
     #[test]
     fn get_brazil_immunization_estimate_works() {
-        let e = get_brazil_immunization_estimate(168025);
+        let e = get_brazil_immunization_estimate(0, 168025);
         assert_eq!(e, chrono::Duration::days(1764));
+        let e = get_brazil_immunization_estimate(11422666, 168025);
+        assert_eq!(e, chrono::Duration::days(1696));
     }
 
     #[test]
