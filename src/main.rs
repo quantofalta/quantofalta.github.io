@@ -50,12 +50,22 @@ fn get_token() -> egg_mode::Token {
     };
 }
 
-async fn post_tweet() {
+async fn post_tweet() -> Result<()> {
     let token = get_token();
+    let csv_text = download_data().await?;
+    let data = get_last_vaccination_data(&csv_text, "Brazil")?;
+    let estimate = get_brazil_immunization_estimate(
+        data.total_vaccinations.ok_or(anyhow!("No total_vaccinations"))?,
+        data.daily_vaccinations.ok_or(anyhow!("No daily_vaccinations"))?,
+    );
+    let s = format_tweet(chrono::Utc::now(), estimate);
 
-    use egg_mode::tweet::DraftTweet;
+    let _post = egg_mode::tweet::DraftTweet::new(s)
+        .send(&token)
+        .await
+        .unwrap();
 
-    let _post = DraftTweet::new("Hey Twitter!").send(&token).await.unwrap();
+    return Ok(());
 }
 
 async fn download_data() -> Result<String> {
@@ -88,8 +98,8 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
             Ok(r) => r,
             Err(e) => {
                 println!("{}", e);
-                continue
-            },
+                continue;
+            }
         };
         let c = &record.location;
         if c == country {
@@ -99,7 +109,10 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     Ok(last_daily_vaccinations.ok_or(anyhow!("No daily vaccinations found"))?)
 }
 
-fn get_brazil_immunization_estimate(total_vaccinations: u32, daily_vaccinations: u32) -> chrono::Duration {
+fn get_brazil_immunization_estimate(
+    total_vaccinations: u32,
+    daily_vaccinations: u32,
+) -> chrono::Duration {
     // https://ftp.ibge.gov.br/Estimativas_de_Populacao/Estimativas_2020/POP2020_20210204.pdf
     const BRAZIL_POPULATION: u32 = 211755692;
     let herd_size = (BRAZIL_POPULATION * 7) / 10;
@@ -138,15 +151,27 @@ fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duratio
         ));
     }
     let s = match vec.len() {
+        0 => "0 dias".to_string(),
         1 => vec[0].clone(),
         2 => vec.as_slice().join(" e "),
         3 => format!("{}, {} e {}", vec[0], vec[1], vec[2]),
-        _ => unreachable!()
+        _ => unreachable!(),
     };
     if vec.len() == 1 && &vec[0][0..1] == "1" {
         return format!("falta {}", s);
     }
     return format!("faltam {}", s);
+}
+
+fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
+    if estimate.num_days() == 0 {
+        return "O Brasil está finalmente imunizado!".to_string();
+    }
+    let s = format_estimate(now, estimate);
+    return format!(
+        "No ritmo atual {} para o Brasil se imunizar contra o novo coronavírus.",
+        s
+    );
 }
 
 // fn test_json() {
@@ -165,10 +190,7 @@ async fn main() {
             return;
         }
     }
-    // post_tweet().await;
-    // let r = download_data().await.unwrap();
-    let r = fs::read_to_string("data.csv").unwrap();
-    println!("{}", get_last_vaccination_data(&r, "Brazil").unwrap().daily_vaccinations.unwrap());
+    post_tweet().await.unwrap();
 }
 
 #[cfg(test)]
@@ -195,6 +217,8 @@ mod tests {
     #[test]
     fn format_estimate_works() {
         let start = chrono::Utc.ymd(2021, 3, 16).and_hms(0, 0, 0);
+        let r = format_estimate(start, chrono::Duration::days(0));
+        assert_eq!(r, "faltam 0 dias");
         let r = format_estimate(start, chrono::Duration::days(1));
         assert_eq!(r, "falta 1 dia");
         let r = format_estimate(start, chrono::Duration::days(2));
@@ -215,5 +239,15 @@ mod tests {
         assert_eq!(r, "faltam 1 ano, 1 mês e 1 dia");
         let r = format_estimate(start, chrono::Duration::days(365 * 2 + 31 + 1));
         assert_eq!(r, "faltam 2 anos, 1 mês e 1 dia");
+    }
+
+    #[test]
+    fn format_tweet_works() {
+        let start = chrono::Utc.ymd(2021, 3, 16).and_hms(0, 0, 0);
+        let r = format_tweet(start, chrono::Duration::days(1));
+        assert_eq!(
+            r,
+            "No ritmo atual, falta 1 dia para o Brasil se imunizar contra o novo coronavírus."
+        );
     }
 }
