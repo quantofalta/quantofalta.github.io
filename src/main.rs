@@ -66,29 +66,34 @@ async fn download_data() -> Result<String> {
 
 #[derive(Debug, serde::Deserialize)]
 struct Record {
-    city: String,
-    region: String,
-    country: String,
-    population: Option<u64>,
+    location: String,
+    iso_code: String,
+    date: String,
+    total_vaccinations: Option<u32>,
+    people_vaccinated: Option<u32>,
+    people_fully_vaccinated: Option<u32>,
+    daily_vaccinations_raw: Option<u32>,
+    daily_vaccinations: Option<u32>,
+    total_vaccinations_per_hundred: Option<f32>,
+    people_vaccinated_per_hundred: Option<f32>,
+    people_fully_vaccinated_per_hundred: Option<f32>,
+    daily_vaccinations_per_million: Option<u32>,
 }
 
-fn get_last_daily_vaccinations(csv_text: &str, country: &str) -> Result<u32> {
+fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     let mut rdr = csv::Reader::from_reader(csv_text.as_bytes());
-    let mut last_daily_vaccinations: Option<u32> = None;
-    for result in rdr.records() {
-        let record = result?;
-        let c = record.get(0).ok_or(anyhow!("No country in record"))?;
+    let mut last_daily_vaccinations: Option<Record> = None;
+    for result in rdr.deserialize() {
+        let record: Record = match result {
+            Ok(r) => r,
+            Err(e) => {
+                println!("{}", e);
+                continue
+            },
+        };
+        let c = &record.location;
         if c == country {
-            let s = record
-                .get(7)
-                .ok_or(anyhow!("No daily_vaccinations in record"))?;
-            let daily_vaccinations: u32 = match s.parse() {
-                Ok(d) => d,
-                Err(_) => {
-                    continue;
-                }
-            };
-            last_daily_vaccinations = Some(daily_vaccinations);
+            last_daily_vaccinations = Some(record);
         }
     }
     Ok(last_daily_vaccinations.ok_or(anyhow!("No daily vaccinations found"))?)
@@ -161,7 +166,7 @@ async fn main() {
     // post_tweet().await;
     // let r = download_data().await.unwrap();
     let r = fs::read_to_string("data.csv").unwrap();
-    println!("{}", get_last_daily_vaccinations(&r, "Brazil").unwrap());
+    println!("{}", get_last_vaccination_data(&r, "Brazil").unwrap().daily_vaccinations.unwrap());
 }
 
 #[cfg(test)]
@@ -171,10 +176,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn get_last_daily_vaccinations_works() {
+    fn get_last_vaccination_data_works() {
         let test_csv = include_str!("./testdata/test.csv");
-        let d = get_last_daily_vaccinations(&test_csv, "Brazil").unwrap();
-        assert_eq!(d, 168025);
+        let d = get_last_vaccination_data(&test_csv, "Brazil").unwrap();
+        assert_eq!(d.daily_vaccinations.unwrap(), 168025);
     }
 
     #[test]
