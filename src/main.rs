@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Result};
+use date_component::date_component;
+
 use serde;
 use std::{env, fs};
 use text_io;
@@ -92,6 +94,54 @@ fn get_last_daily_vaccinations(csv_text: &str, country: &str) -> Result<u32> {
     Ok(last_daily_vaccinations.ok_or(anyhow!("No daily vaccinations found"))?)
 }
 
+fn get_brazil_immunization_estimate(daily_vaccinations: u32) -> chrono::Duration {
+    // https://ftp.ibge.gov.br/Estimativas_de_Populacao/Estimativas_2020/POP2020_20210204.pdf
+    const BRAZIL_POPULATION: u32 = 211755692;
+    let herd_size = (BRAZIL_POPULATION * 7) / 10;
+    let doses = herd_size * 2;
+    let days = doses / daily_vaccinations;
+    return chrono::Duration::days(days.into());
+}
+
+fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
+    let end = now + estimate;
+    let components = date_component::calculate(&now, &end);
+    println!("{:?} {:?}", end, components);
+    let mut vec: Vec<String> = Vec::new();
+    if components.year > 0 {
+        vec.push(format!(
+            "{} {}",
+            components.year,
+            if components.year == 1 { "ano" } else { "anos" }
+        ));
+    }
+    if components.month > 0 {
+        vec.push(format!(
+            "{} {}",
+            components.month,
+            if components.month == 1 {
+                "mês"
+            } else {
+                "meses"
+            }
+        ));
+    }
+    if components.day > 0 {
+        vec.push(format!(
+            "{} {}",
+            components.day,
+            if components.day == 1 { "dia" } else { "dias" }
+        ));
+    }
+    let s = match vec.len() {
+        1 => vec[0].clone(),
+        2 => vec.as_slice().join(" e "),
+        3 => format!("{}, {} e {}", vec[0], vec[1], vec[2]),
+        _ => unreachable!()
+    };
+    return s;
+}
+
 // fn test_json() {
 //     let app_secret_json = include_str!("../app-secret.json");
 //     let token: egg_mode::KeyPair = serde_json::from_str(app_secret_json).unwrap();
@@ -114,3 +164,47 @@ async fn main() {
     println!("{}", get_last_daily_vaccinations(&r, "Brazil").unwrap());
 }
 
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+
+    #[test]
+    fn get_last_daily_vaccinations_works() {
+        let test_csv = include_str!("./testdata/test.csv");
+        let d = get_last_daily_vaccinations(&test_csv, "Brazil").unwrap();
+        assert_eq!(d, 168025);
+    }
+
+    #[test]
+    fn get_brazil_immunization_estimate_works() {
+        let e = get_brazil_immunization_estimate(168025);
+        assert_eq!(e, chrono::Duration::days(1764));
+    }
+
+    #[test]
+    fn format_estimate_works() {
+        let start = chrono::Utc.ymd(2021, 3, 16).and_hms(0, 0, 0);
+        let r = format_estimate(start, chrono::Duration::days(1));
+        assert_eq!(r, "1 dia");
+        let r = format_estimate(start, chrono::Duration::days(2));
+        assert_eq!(r, "2 dias");
+        let r = format_estimate(start, chrono::Duration::days(31));
+        assert_eq!(r, "1 mês");
+        let r = format_estimate(start, chrono::Duration::days(32));
+        assert_eq!(r, "1 mês e 1 dia");
+        let r = format_estimate(start, chrono::Duration::days(33));
+        assert_eq!(r, "1 mês e 2 dias");
+        let r = format_estimate(start, chrono::Duration::days(31 + 30));
+        assert_eq!(r, "2 meses");
+        let r = format_estimate(start, chrono::Duration::days(365));
+        assert_eq!(r, "1 ano");
+        let r = format_estimate(start, chrono::Duration::days(365 + 31));
+        assert_eq!(r, "1 ano e 1 mês");
+        let r = format_estimate(start, chrono::Duration::days(365 + 31 + 1));
+        assert_eq!(r, "1 ano, 1 mês e 1 dia");
+        let r = format_estimate(start, chrono::Duration::days(365 * 2 + 31 + 1));
+        assert_eq!(r, "2 anos, 1 mês e 1 dia");
+    }
+}

@@ -171,6 +171,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "date_component"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0213fb5f09324b290cd7ef5bbc7e298b4772b875d52dcee864210917bc7af652"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -813,7 +822,9 @@ name = "quantofalta"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "csv",
+ "date_component",
  "egg-mode",
  "reqwest",
  "serde",
