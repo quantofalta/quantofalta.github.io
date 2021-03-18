@@ -8,8 +8,7 @@ use text_io;
 const DATA_URL: &str = "https://covid.ourworldindata.org/data/vaccinations/vaccinations.csv";
 
 async fn log_in() {
-    let app_secret_json = include_str!("../app-secret.json");
-    let con_token: egg_mode::KeyPair = serde_json::from_str(app_secret_json).unwrap();
+    let con_token = get_app_key_pair().unwrap();
     // "oob" is needed for PIN-based auth; see docs for `request_token` for more info
     let request_token = egg_mode::auth::request_token(&con_token, "oob")
         .await
@@ -34,24 +33,30 @@ async fn log_in() {
     }
 }
 
-fn get_app_key_pair() -> egg_mode::KeyPair {
-    let app_secret_json = include_str!("../app-secret.json");
-    let token: egg_mode::KeyPair = serde_json::from_str(app_secret_json).unwrap();
-    return token;
+fn get_app_key_pair() -> Result<egg_mode::KeyPair> {
+    let mut app_secret_json = env::var("QUANTOFALTA_APPSECRET").ok();
+    if app_secret_json.is_none() {
+        app_secret_json = Some(fs::read_to_string("app-secret.json")?);
+    }
+    let token: egg_mode::KeyPair = serde_json::from_str(&app_secret_json.unwrap())?;
+    return Ok(token);
 }
 
-fn get_token() -> egg_mode::Token {
-    let app_key_pair = get_app_key_pair();
-    let user_secret_json = fs::read_to_string("user-secret.json").unwrap();
-    let user_key_pair: egg_mode::KeyPair = serde_json::from_str(&user_secret_json).unwrap();
-    return egg_mode::Token::Access {
+fn get_token() -> Result<egg_mode::Token> {
+    let app_key_pair = get_app_key_pair()?;
+    let mut user_secret_json = env::var("QUANTOFALTA_USERSECRET").ok();
+    if user_secret_json.is_none() {
+        user_secret_json = Some(fs::read_to_string("user-secret.json")?);
+    }
+    let user_key_pair: egg_mode::KeyPair = serde_json::from_str(&user_secret_json.unwrap())?;
+    return Ok(egg_mode::Token::Access {
         access: user_key_pair,
         consumer: app_key_pair,
-    };
+    });
 }
 
 async fn post_tweet(print: bool) -> Result<()> {
-    let token = get_token();
+    let token = get_token()?;
     let csv_text = download_data().await?;
     let data = get_last_vaccination_data(&csv_text, "Brazil")?;
     let estimate = get_brazil_immunization_estimate(
@@ -193,13 +198,17 @@ fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) 
 async fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
+    let mut print = false;
     if args.len() >= 2 {
         if args[1] == "login" {
             log_in().await;
             return;
         }
+        if args[1] == "-n" {
+            print = true;
+        }
     }
-    post_tweet(false).await.unwrap();
+    post_tweet(print).await.unwrap();
 }
 
 #[cfg(test)]
