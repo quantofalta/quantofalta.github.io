@@ -50,20 +50,26 @@ fn get_token() -> egg_mode::Token {
     };
 }
 
-async fn post_tweet() -> Result<()> {
+async fn post_tweet(print: bool) -> Result<()> {
     let token = get_token();
     let csv_text = download_data().await?;
     let data = get_last_vaccination_data(&csv_text, "Brazil")?;
     let estimate = get_brazil_immunization_estimate(
-        data.total_vaccinations.ok_or(anyhow!("No total_vaccinations"))?,
-        data.daily_vaccinations.ok_or(anyhow!("No daily_vaccinations"))?,
+        data.total_vaccinations
+            .ok_or(anyhow!("No total_vaccinations"))?,
+        data.daily_vaccinations
+            .ok_or(anyhow!("No daily_vaccinations"))?,
     );
     let s = format_tweet(chrono::Utc::now(), estimate);
 
-    let _post = egg_mode::tweet::DraftTweet::new(s)
-        .send(&token)
-        .await
-        .unwrap();
+    if print {
+        println!("{}", s);
+    } else {
+        let _post = egg_mode::tweet::DraftTweet::new(s)
+            .send(&token)
+            .await
+            .unwrap();
+    }
 
     return Ok(());
 }
@@ -92,21 +98,21 @@ struct Record {
 
 fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     let mut rdr = csv::Reader::from_reader(csv_text.as_bytes());
-    let mut last_daily_vaccinations: Option<Record> = None;
+    let mut last_record: Option<Record> = None;
     for result in rdr.deserialize() {
         let record: Record = match result {
             Ok(r) => r,
-            Err(e) => {
-                println!("{}", e);
+            Err(_) => {
                 continue;
             }
         };
         let c = &record.location;
         if c == country {
-            last_daily_vaccinations = Some(record);
+            last_record = Some(record);
         }
     }
-    Ok(last_daily_vaccinations.ok_or(anyhow!("No daily vaccinations found"))?)
+    log::debug!("Last record: {:?}", last_record);
+    Ok(last_record.ok_or(anyhow!("No daily vaccinations found"))?)
 }
 
 fn get_brazil_immunization_estimate(
@@ -118,6 +124,8 @@ fn get_brazil_immunization_estimate(
     let herd_size = (BRAZIL_POPULATION * 7) / 10;
     let doses = std::cmp::max(herd_size * 2 - total_vaccinations, 0);
     let days = doses / daily_vaccinations;
+    log::debug!("BRAZIL_POPULATION  = {}; herd_size = {}; total_vaccinations = {}, doses = {}; daily_vaccinations = {}, days = {}",
+        BRAZIL_POPULATION, herd_size, total_vaccinations, doses, daily_vaccinations, days);
     return chrono::Duration::days(days.into());
 }
 
@@ -169,7 +177,7 @@ fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) 
     }
     let s = format_estimate(now, estimate);
     return format!(
-        "No ritmo atual {} para o Brasil se imunizar contra o novo coronavírus.",
+        "No ritmo atual, {} para o Brasil se imunizar contra o novo coronavírus.",
         s
     );
 }
@@ -183,6 +191,7 @@ fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) 
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let args: Vec<String> = env::args().collect();
     if args.len() >= 2 {
         if args[1] == "login" {
@@ -190,7 +199,7 @@ async fn main() {
             return;
         }
     }
-    post_tweet().await.unwrap();
+    post_tweet(false).await.unwrap();
 }
 
 #[cfg(test)]
