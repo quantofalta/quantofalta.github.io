@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    # - cron:  '0 14 * * *'
+    - cron:  '40 23 * * *'
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,6 +24,7 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Tweet
+      if: github.event_name == 'schedule'
       env:
         QUANTOFALTA_APPSECRET: ${{ secrets.QUANTOFALTA_APPSECRET }}
         QUANTOFALTA_USERSECRET: ${{ secrets.QUANTOFALTA_USERSECRET }}
