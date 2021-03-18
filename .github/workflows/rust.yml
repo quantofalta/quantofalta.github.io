@@ -17,6 +17,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --release
     - name: Run tests
       run: cargo test --verbose
+    - name: Tweet
+      env:
+        QUANTOFALTA_APPSECRET: ${{ secrets.QUANTOFALTA_APPSECRET }}
+        QUANTOFALTA_USERSECRET: ${{ secrets.QUANTOFALTA_USERSECRET }}
+        RUST_LOG: quantofalta=debug
+      run: ./target/release/quantofalta
