@@ -1,0 +1,16 @@
+body {
+    font-family: 'PT Serif', serif;
+}
+h1 {
+    font-size: 2.5em;
+    font-weight: normal;
+}
+section {
+    font-size: 1.2em;
+    padding: 1em;
+    max-width: 800px;
+    margin: 0 auto;
+}
+.main {
+    margin: 200px auto;
+}
