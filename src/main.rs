@@ -192,7 +192,7 @@ fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) 
     }
     let s = format_estimate(now, estimate);
     return format!(
-        "No ritmo atual, {} para o Brasil se imunizar contra o novo coronavírus.",
+        "No ritmo atual de vacinação, {} para o Brasil se imunizar contra o novo coronavírus.",
         s
     );
 }
@@ -278,7 +278,7 @@ mod tests {
         let r = format_tweet(start, chrono::Duration::days(1));
         assert_eq!(
             r,
-            "No ritmo atual, falta 1 dia para o Brasil se imunizar contra o novo coronavírus."
+            "No ritmo atual de vacinação, falta 1 dia para o Brasil se imunizar contra o novo coronavírus."
         );
     }
 }
