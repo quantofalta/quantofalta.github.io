@@ -38,3 +38,13 @@ jobs:
         QUANTOFALTA_USERSECRET: ${{ secrets.QUANTOFALTA_USERSECRET }}
         RUST_LOG: quantofalta=debug
       run: ./target/release/quantofalta
+    - name: Generate HTML Only
+      if: github.event_name != 'schedule'
+      env:
+        RUST_LOG: quantofalta=debug
+      run: ./target/release/quantofalta -n
+    - name: Publish HTML
+      uses: JamesIves/github-pages-deploy-action@4.1.0
+      with:
+          branch: gh-pages
+          folder: html

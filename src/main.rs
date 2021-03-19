@@ -55,8 +55,14 @@ fn get_token() -> Result<egg_mode::Token> {
     });
 }
 
+fn gen_html(estimate: &str) -> Result<()> {
+    let template = fs::read_to_string("index.html")?;
+    let html = template.replace("{{estimate}}", estimate);
+    fs::write("html/index.html", html)?;
+    Ok(())
+}
+
 async fn post_tweet(print: bool) -> Result<()> {
-    let token = get_token()?;
     let csv_text = download_data().await?;
     let data = get_last_vaccination_data(&csv_text, "Brazil")?;
     let estimate = get_brazil_immunization_estimate(
@@ -67,14 +73,18 @@ async fn post_tweet(print: bool) -> Result<()> {
     );
     let s = format_tweet(chrono::Utc::now(), estimate);
 
+    gen_html(&s)?;
+
     if print {
         println!("{}", s);
     } else {
+        let token = get_token()?;
         let _post = egg_mode::tweet::DraftTweet::new(s)
             .send(&token)
             .await
             .unwrap();
     }
+
 
     return Ok(());
 }
@@ -200,12 +210,15 @@ async fn main() {
     let args: Vec<String> = env::args().collect();
     let mut print = false;
     if args.len() >= 2 {
-        if args[1] == "login" {
-            log_in().await;
-            return;
-        }
-        if args[1] == "-n" {
-            print = true;
+        match args[1].as_str() {
+            "login" => {
+                log_in().await;
+                return;
+            }
+            "-n" =>  {
+                print = true;
+            }
+            _ => {}
         }
     }
     post_tweet(print).await.unwrap();
