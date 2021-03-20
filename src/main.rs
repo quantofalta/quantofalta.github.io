@@ -7,6 +7,7 @@ use text_io;
 
 const DATA_URL: &str = "https://covid.ourworldindata.org/data/vaccinations/vaccinations.csv";
 
+/// Log in into Twitter and generate an authentication token.
 async fn log_in() {
     let con_token = get_app_key_pair().unwrap();
     // "oob" is needed for PIN-based auth; see docs for `request_token` for more info
@@ -33,6 +34,7 @@ async fn log_in() {
     }
 }
 
+/// Get application key pair from an environment variable or from a file.
 fn get_app_key_pair() -> Result<egg_mode::KeyPair> {
     let mut app_secret_json = env::var("QUANTOFALTA_APPSECRET").ok();
     if app_secret_json.is_none() {
@@ -42,6 +44,7 @@ fn get_app_key_pair() -> Result<egg_mode::KeyPair> {
     return Ok(token);
 }
 
+/// Get user token using a key pair from an environment variable or from a file.
 fn get_token() -> Result<egg_mode::Token> {
     let app_key_pair = get_app_key_pair()?;
     let mut user_secret_json = env::var("QUANTOFALTA_USERSECRET").ok();
@@ -55,14 +58,22 @@ fn get_token() -> Result<egg_mode::Token> {
     });
 }
 
+/// Generate HTML page from the template.
 fn gen_html(estimate: &str) -> Result<()> {
     let template = fs::read_to_string("index.html")?;
-    let html = template.replace("{{estimate}}", estimate);
+    // TODO: improve this. This is pretty ugly...
+    let mut formatted_estimate = estimate.replace("faltam ", "faltam <br/><b>");
+    formatted_estimate = formatted_estimate.replace("falta ", "faltam <br/><b>");
+    formatted_estimate = formatted_estimate.replace(" para ", "</b><br/> para ");
+    let html = template.replace("{{estimate}}", &formatted_estimate);
     fs::write("html/index.html", html)?;
     Ok(())
 }
 
-async fn post_tweet(print: bool) -> Result<()> {
+/// Post estimate via Twitter and HTML page.
+///
+/// `print`: indicates that it should print to stdout and not tweet.
+async fn post_estimate(print: bool) -> Result<()> {
     let csv_text = download_data().await?;
     let data = get_last_vaccination_data(&csv_text, "Brazil")?;
     let estimate = get_brazil_immunization_estimate(
@@ -71,7 +82,7 @@ async fn post_tweet(print: bool) -> Result<()> {
         data.daily_vaccinations
             .ok_or(anyhow!("No daily_vaccinations"))?,
     );
-    let s = format_tweet(chrono::Utc::now(), estimate);
+    let s = format_full_estimate(chrono::Utc::now(), estimate);
 
     gen_html(&s)?;
 
@@ -89,12 +100,14 @@ async fn post_tweet(print: bool) -> Result<()> {
     return Ok(());
 }
 
+/// Download vacciation data CSV from Our World in Data.
 async fn download_data() -> Result<String> {
     let response = reqwest::get(DATA_URL).await?;
     let text = response.text().await?;
     Ok(text)
 }
 
+/// Record type for vaccination data from Our World in Data.
 #[derive(Debug, serde::Deserialize)]
 struct Record {
     location: String,
@@ -111,6 +124,8 @@ struct Record {
     daily_vaccinations_per_million: Option<u32>,
 }
 
+/// Get last vacciation data from Our World in Data for the given country using
+/// the previously downloaded CSV.
 fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     let mut rdr = csv::Reader::from_reader(csv_text.as_bytes());
     let mut last_record: Option<Record> = None;
@@ -130,6 +145,7 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     Ok(last_record.ok_or(anyhow!("No daily vaccinations found"))?)
 }
 
+/// Get immunization estimate for Brazil given the total and daily vaccination statistics.
 fn get_brazil_immunization_estimate(
     total_vaccinations: u32,
     daily_vaccinations: u32,
@@ -144,6 +160,7 @@ fn get_brazil_immunization_estimate(
     return chrono::Duration::days(days.into());
 }
 
+/// Format an estimate in portuguese ("faltam X anos, Y meses e Z dias")
 fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
     let end = now + estimate;
     let components = date_component::calculate(&now, &end);
@@ -186,7 +203,8 @@ fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duratio
     return format!("faltam {}", s);
 }
 
-fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
+/// Format the full estimate text that will be tweeted and included in the HTML.
+fn format_full_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
     if estimate.num_days() == 0 {
         return "O Brasil está finalmente imunizado!".to_string();
     }
@@ -197,13 +215,8 @@ fn format_tweet(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) 
     );
 }
 
-// fn test_json() {
-//     let app_secret_json = include_str!("../app-secret.json");
-//     let token: egg_mode::KeyPair = serde_json::from_str(app_secret_json).unwrap();
-//     let j = serde_json::to_string(&token).unwrap();
-//     println!("{}", j);
-// }
-
+/// Main function. Process arguments.
+// TODO: use `clap`? Seems overkill.
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -221,7 +234,7 @@ async fn main() {
             _ => {}
         }
     }
-    post_tweet(print).await.unwrap();
+    post_estimate(print).await.unwrap();
 }
 
 #[cfg(test)]
@@ -275,7 +288,7 @@ mod tests {
     #[test]
     fn format_tweet_works() {
         let start = chrono::Utc.ymd(2021, 3, 16).and_hms(0, 0, 0);
-        let r = format_tweet(start, chrono::Duration::days(1));
+        let r = format_full_estimate(start, chrono::Duration::days(1));
         assert_eq!(
             r,
             "No ritmo atual de vacinação, falta 1 dia para o Brasil se imunizar contra o novo coronavírus."
