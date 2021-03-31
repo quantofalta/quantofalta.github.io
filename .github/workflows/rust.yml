@@ -36,12 +36,12 @@ jobs:
         QUANTOFALTA_APPSECRET: ${{ secrets.QUANTOFALTA_APPSECRET }}
         QUANTOFALTA_USERSECRET: ${{ secrets.QUANTOFALTA_USERSECRET }}
         RUST_LOG: quantofalta=debug
-      run: ./target/release/quantofalta
+      run: RUST_BACKTRACE=1 ./target/release/quantofalta
     - name: Generate HTML Only
       if: github.event_name != 'schedule'
       env:
         RUST_LOG: quantofalta=debug
-      run: ./target/release/quantofalta -n
+      run: RUST_BACKTRACE=1 ./target/release/quantofalta -n
     - name: Publish HTML
       uses: JamesIves/github-pages-deploy-action@4.1.0
       with:
