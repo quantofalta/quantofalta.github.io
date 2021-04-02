@@ -294,4 +294,12 @@ mod tests {
             "No ritmo atual de vacinação, falta 1 dia para o Brasil se imunizar contra o novo coronavírus."
         );
     }
+
+    #[test]
+    fn test_date() {
+        let now = chrono::Utc.ymd(2021, 3, 31).and_hms(15, 0, 0);
+        let estimate = chrono::Duration::days(646);
+        let end = now + estimate;
+        let _components = date_component::calculate(&now, &end);
+    }
 }

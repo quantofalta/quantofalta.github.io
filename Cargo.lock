@@ -184,8 +184,7 @@ dependencies = [
 [[package]]
 name = "date_component"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0213fb5f09324b290cd7ef5bbc7e298b4772b875d52dcee864210917bc7af652"
+source = "git+https://github.com/conradoplg/date_component?branch=fix-corner-cases#c3858a6ba2987e36573e6d7070788edbeda86964"
 dependencies = [
  "chrono",
 ]
