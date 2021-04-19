@@ -14,3 +14,4 @@ section {
 .main {
     margin: 150px auto;
 }
+a { color: inherit; }
