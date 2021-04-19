@@ -116,7 +116,7 @@ struct Record {
     total_vaccinations: Option<u32>,
     people_vaccinated: Option<u32>,
     people_fully_vaccinated: Option<u32>,
-    daily_vaccinations_raw: Option<u32>,
+    daily_vaccinations_raw: Option<i32>,
     daily_vaccinations: Option<u32>,
     total_vaccinations_per_hundred: Option<f32>,
     people_vaccinated_per_hundred: Option<f32>,
@@ -132,7 +132,8 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     for result in rdr.deserialize() {
         let record: Record = match result {
             Ok(r) => r,
-            Err(_) => {
+            Err(e) => {
+                log::debug!("Error parsing record: {:?}", e);
                 continue;
             }
         };
