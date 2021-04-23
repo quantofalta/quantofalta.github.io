@@ -5,7 +5,7 @@ use serde;
 use std::{env, fs};
 use text_io;
 
-const DATA_URL: &str = "https://covid.ourworldindata.org/data/vaccinations/vaccinations.csv";
+const DATA_URL: &str = "https://raw.githubusercontent.com/wcota/covid19br/master/cases-brazil-states.csv";
 
 /// Log in into Twitter and generate an authentication token.
 async fn log_in() {
@@ -75,14 +75,10 @@ fn gen_html(estimate: &str) -> Result<()> {
 /// `print`: indicates that it should print to stdout and not tweet.
 async fn post_estimate(print: bool) -> Result<()> {
     let csv_text = download_data().await?;
-    let data = get_last_vaccination_data(&csv_text, "Brazil")?;
-    let estimate = get_brazil_immunization_estimate(
-        data.total_vaccinations
-            .ok_or(anyhow!("No total_vaccinations"))?,
-        data.daily_vaccinations
-            .ok_or(anyhow!("No daily_vaccinations"))?,
-    );
-    let s = format_full_estimate(chrono::Utc::now(), estimate);
+    let now = chrono::Utc::now();
+    let data = get_last_vaccination_data_covid19br(&csv_text, now)?;
+    let estimate = get_brazil_immunization_estimate(data.0, data.1);
+    let s = format_full_estimate(now, estimate);
 
     gen_html(&s)?;
 
@@ -126,6 +122,7 @@ struct Record {
 
 /// Get last vacciation data from Our World in Data for the given country using
 /// the previously downloaded CSV.
+#[allow(dead_code)]
 fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     let mut rdr = csv::Reader::from_reader(csv_text.as_bytes());
     let mut last_record: Option<Record> = None;
@@ -144,6 +141,68 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
     }
     log::debug!("Last record: {:?}", last_record);
     Ok(last_record.ok_or(anyhow!("No daily vaccinations found"))?)
+}
+
+/// Record type for vaccination data from covid19br.
+#[derive(Debug, serde::Deserialize)]
+struct RecordCovid19br {
+    epi_week: u32,
+    date: String,
+    country: String,
+    state: String,
+    city: String,
+    new_deaths: Option<u32>,
+    deaths: Option<u32>,
+    news_cases: Option<u32>,
+    total_cases: Option<u32>,
+    deaths_ms: Option<u32>,
+    total_cases_ms: Option<u32>,
+    deaths_per_100k: Option<f32>,
+    total_cases_per_100k: Option<f32>,
+    deaths_by_total_cases: Option<f32>,
+    recovered: Option<u32>,
+    suspects: Option<u32>,
+    tests: Option<u32>,
+    tests_per_100k: Option<f32>,
+    vaccinated: Option<u32>,
+    vaccinated_per_100k: Option<f32>,
+    vaccinated_second: Option<u32>,
+    vaccinated_second_per_100k: Option<f32>,
+}
+
+impl RecordCovid19br {
+    fn vaccinated_total(&self) -> u32 {
+        self.vaccinated.unwrap_or_default() + self.vaccinated_second.unwrap_or_default()
+    }
+}
+
+/// Get last vacciation data from Our World in Data for the given country using
+/// the previously downloaded CSV.
+fn get_last_vaccination_data_covid19br(csv_text: &str, now: chrono::DateTime<chrono::Utc>) -> Result<(u32, u32)> {
+    let mut rdr = csv::Reader::from_reader(csv_text.as_bytes());
+    let mut v: Vec<RecordCovid19br> = Vec::new();
+    let br_now = now.with_timezone(&chrono::FixedOffset::west(3 * 3600));
+    let current_date_str = format!("{}", br_now.format("%Y-%m-%d"));
+    log::debug!("Ignoring possibly incomplete data from current date: {}", current_date_str);
+    for result in rdr.deserialize() {
+        let record: RecordCovid19br = match result {
+            Ok(r) => r,
+            Err(e) => {
+                log::debug!("Error parsing record: {:?}", e);
+                continue;
+            }
+        };
+        if record.state == "TOTAL" && record.date != current_date_str {
+            v.push(record);
+        }
+    }
+    let first_record = &v[v.len()-8];
+    let last_record = v.last().unwrap();
+    let total_last7_vaccinations = last_record.vaccinated_total() - first_record.vaccinated_total();
+    let daily_vaccinations = total_last7_vaccinations / 7;
+    log::debug!("{}: total vaccinations = {}", first_record.date, first_record.vaccinated_total());
+    log::debug!("{}: total vaccinations = {}", last_record.date, last_record.vaccinated_total());
+    Ok((last_record.vaccinated_total(), daily_vaccinations))
 }
 
 /// Get immunization estimate for Brazil given the total and daily vaccination statistics.
@@ -249,6 +308,16 @@ mod tests {
         let test_csv = include_str!("./testdata/test.csv");
         let d = get_last_vaccination_data(&test_csv, "Brazil").unwrap();
         assert_eq!(d.daily_vaccinations.unwrap(), 168025);
+    }
+
+    #[test]
+    fn get_last_vaccination_data_covid19br_works() {
+        let test_csv = include_str!("./testdata/cases-brazil-states.csv");
+        let now = chrono::Utc.ymd(2021, 4, 24).and_hms(0, 0, 0);
+        let d = get_last_vaccination_data_covid19br(&test_csv, now).unwrap();
+        println!("{} {}", d.0, d.1);
+        assert_eq!(d.0, 39220391);
+        assert_eq!(d.1, 738580);
     }
 
     #[test]
