@@ -184,7 +184,7 @@ dependencies = [
 [[package]]
 name = "date_component"
 version = "0.1.2"
-source = "git+https://github.com/conradoplg/date_component?branch=fix-corner-cases#c3858a6ba2987e36573e6d7070788edbeda86964"
+source = "git+https://github.com/conradoplg/date_component?branch=fix-another-corner-case#52028333cbf91c82b06d848d04a63e342e9f47fb"
 dependencies = [
  "chrono",
 ]

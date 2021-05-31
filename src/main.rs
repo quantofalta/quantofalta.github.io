@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use date_component::date_component;
 
-use serde;
 use std::{env, fs};
-use text_io;
 
-const DATA_URL: &str = "https://raw.githubusercontent.com/wcota/covid19br/master/cases-brazil-states.csv";
+const BRAZIL_POPULATION: u32 = 211755692;
+
+const DATA_URL: &str =
+    "https://raw.githubusercontent.com/wcota/covid19br/master/cases-brazil-states.csv";
 
 /// Log in into Twitter and generate an authentication token.
 async fn log_in() {
@@ -22,15 +23,13 @@ async fn log_in() {
         egg_mode::auth::access_token(con_token, &request_token, verifier)
             .await
             .unwrap();
-    match token {
-        egg_mode::auth::Token::Access {
-            consumer: _,
-            access,
-        } => {
-            let token_json = serde_json::to_string(&access).unwrap();
-            println!("{}", token_json);
-        }
-        _ => {}
+    if let egg_mode::auth::Token::Access {
+        consumer: _,
+        access,
+    } = token
+    {
+        let token_json = serde_json::to_string(&access).unwrap();
+        println!("{}", token_json);
     }
 }
 
@@ -41,7 +40,7 @@ fn get_app_key_pair() -> Result<egg_mode::KeyPair> {
         app_secret_json = Some(fs::read_to_string("app-secret.json")?);
     }
     let token: egg_mode::KeyPair = serde_json::from_str(&app_secret_json.unwrap())?;
-    return Ok(token);
+    Ok(token)
 }
 
 /// Get user token using a key pair from an environment variable or from a file.
@@ -52,10 +51,10 @@ fn get_token() -> Result<egg_mode::Token> {
         user_secret_json = Some(fs::read_to_string("user-secret.json")?);
     }
     let user_key_pair: egg_mode::KeyPair = serde_json::from_str(&user_secret_json.unwrap())?;
-    return Ok(egg_mode::Token::Access {
+    Ok(egg_mode::Token::Access {
         access: user_key_pair,
         consumer: app_key_pair,
-    });
+    })
 }
 
 /// Generate HTML page from the template.
@@ -77,21 +76,23 @@ async fn post_estimate(print: bool) -> Result<()> {
     let csv_text = download_data().await?;
     let now = chrono::Utc::now();
     let data = get_last_vaccination_data_covid19br(&csv_text, now)?;
-    let estimate = get_brazil_immunization_estimate(data.0, data.1);
-    let s = format_full_estimate(now, estimate);
+    let estimate = get_brazil_immunization_estimate(data.1, data.2);
+    let estimate = format_full_estimate(now, estimate);
+    let progress = format_progress(&data.0)?;
 
-    gen_html(&s)?;
+    gen_html(&estimate)?;
+
+    let estimate_and_progress = format!("{}\n\n{}", estimate, progress);
 
     if print {
-        println!("{}", s);
+        println!("{}", estimate_and_progress);
     } else {
         let token = get_token()?;
-        let _post = egg_mode::tweet::DraftTweet::new(s)
+        let _post = egg_mode::tweet::DraftTweet::new(estimate_and_progress)
             .send(&token)
             .await
             .unwrap();
     }
-
 
     return Ok(());
 }
@@ -140,34 +141,41 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
         }
     }
     log::debug!("Last record: {:?}", last_record);
-    Ok(last_record.ok_or(anyhow!("No daily vaccinations found"))?)
+    last_record.ok_or_else(|| anyhow!("No daily vaccinations found"))
 }
 
 /// Record type for vaccination data from covid19br.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 struct RecordCovid19br {
-    epi_week: u32,
+    // epi_week: u32,
     date: String,
     country: String,
     state: String,
-    city: String,
-    new_deaths: Option<u32>,
-    deaths: Option<u32>,
-    news_cases: Option<u32>,
-    total_cases: Option<u32>,
-    deaths_ms: Option<u32>,
-    total_cases_ms: Option<u32>,
-    deaths_per_100k: Option<f32>,
-    total_cases_per_100k: Option<f32>,
-    deaths_by_total_cases: Option<f32>,
-    recovered: Option<u32>,
-    suspects: Option<u32>,
-    tests: Option<u32>,
-    tests_per_100k: Option<f32>,
+    // city: String,
+    // #[serde(rename = "newDeaths")]
+    // new_deaths: Option<u32>,
+    // deaths: Option<u32>,
+    // #[serde(rename = "newCases")]
+    // news_cases: Option<u32>,
+    // #[serde(rename = "totalCasesMS")]
+    // total_cases: Option<u32>,
+    // #[serde(rename = "deathsMS")]
+    // deaths_ms: Option<u32>,
+    // #[serde(rename = "totalCasesMS")]
+    // total_cases_ms: Option<u32>,
+    // deaths_per_100k_inhabitants: Option<f64>,
+    // #[serde(rename = "totalCases_per_100k_inhabitants")]
+    // total_cases_per_100k_inhabitants: Option<f64>,
+    // #[serde(rename = "deaths_by_totalCases")]
+    // deaths_by_total_cases: Option<f64>,
+    // recovered: Option<u32>,
+    // suspects: Option<u32>,
+    // tests: Option<u32>,
+    // tests_per_100k_inhabitants: Option<f64>,
     vaccinated: Option<u32>,
-    vaccinated_per_100k: Option<f32>,
+    vaccinated_per_100k_inhabitants: Option<f64>,
     vaccinated_second: Option<u32>,
-    vaccinated_second_per_100k: Option<f32>,
+    vaccinated_second_per_100k_inhabitants: Option<f64>,
 }
 
 impl RecordCovid19br {
@@ -176,19 +184,25 @@ impl RecordCovid19br {
     }
 }
 
-/// Get last vacciation data from Our World in Data for the given country using
+/// Get last vacciation data from covid19br for the given country using
 /// the previously downloaded CSV.
-fn get_last_vaccination_data_covid19br(csv_text: &str, now: chrono::DateTime<chrono::Utc>) -> Result<(u32, u32)> {
+fn get_last_vaccination_data_covid19br(
+    csv_text: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(RecordCovid19br, u32, u32)> {
     let mut rdr = csv::Reader::from_reader(csv_text.as_bytes());
     let mut v: Vec<RecordCovid19br> = Vec::new();
     let br_now = now.with_timezone(&chrono::FixedOffset::west(3 * 3600));
     let current_date_str = format!("{}", br_now.format("%Y-%m-%d"));
-    log::debug!("Ignoring possibly incomplete data from current date: {}", current_date_str);
+    log::debug!(
+        "Ignoring possibly incomplete data from current date: {}",
+        current_date_str
+    );
     for result in rdr.deserialize() {
         let record: RecordCovid19br = match result {
             Ok(r) => r,
             Err(e) => {
-                log::debug!("Error parsing record: {:?}", e);
+                println!("Error parsing record: {:?}", e);
                 continue;
             }
         };
@@ -196,13 +210,26 @@ fn get_last_vaccination_data_covid19br(csv_text: &str, now: chrono::DateTime<chr
             v.push(record);
         }
     }
-    let first_record = &v[v.len()-8];
+    let first_record = &v[v.len() - 8];
     let last_record = v.last().unwrap();
     let total_last7_vaccinations = last_record.vaccinated_total() - first_record.vaccinated_total();
     let daily_vaccinations = total_last7_vaccinations / 7;
-    log::debug!("{}: total vaccinations = {}", first_record.date, first_record.vaccinated_total());
-    log::debug!("{}: total vaccinations = {}", last_record.date, last_record.vaccinated_total());
-    Ok((last_record.vaccinated_total(), daily_vaccinations))
+    log::debug!("last_record = {:?}", last_record);
+    log::debug!(
+        "{}: total vaccinations = {}",
+        first_record.date,
+        first_record.vaccinated_total()
+    );
+    log::debug!(
+        "{}: total vaccinations = {}",
+        last_record.date,
+        last_record.vaccinated_total()
+    );
+    Ok((
+        last_record.clone(),
+        last_record.vaccinated_total(),
+        daily_vaccinations,
+    ))
 }
 
 /// Get immunization estimate for Brazil given the total and daily vaccination statistics.
@@ -211,18 +238,18 @@ fn get_brazil_immunization_estimate(
     daily_vaccinations: u32,
 ) -> chrono::Duration {
     // https://ftp.ibge.gov.br/Estimativas_de_Populacao/Estimativas_2020/POP2020_20210204.pdf
-    const BRAZIL_POPULATION: u32 = 211755692;
     let herd_size = (BRAZIL_POPULATION * 7) / 10;
     let doses = std::cmp::max(herd_size * 2 - total_vaccinations, 0);
     let days = doses / daily_vaccinations;
     log::debug!("BRAZIL_POPULATION  = {}; herd_size = {}; total_vaccinations = {}, doses = {}; daily_vaccinations = {}, days = {}",
         BRAZIL_POPULATION, herd_size, total_vaccinations, doses, daily_vaccinations, days);
-    return chrono::Duration::days(days.into());
+    chrono::Duration::days(days.into())
 }
 
 /// Format an estimate in portuguese ("faltam X anos, Y meses e Z dias")
 fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
     let end = now + estimate;
+    log::debug!("Calculating difference between {} and {}", &now, &end);
     let components = date_component::calculate(&now, &end);
     let mut vec: Vec<String> = Vec::new();
     if components.year > 0 {
@@ -275,6 +302,30 @@ fn format_full_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Du
     );
 }
 
+fn format_progress(data: &RecordCovid19br) -> Result<String> {
+    let progress1 = data
+        .vaccinated_per_100k_inhabitants
+        .ok_or_else(|| anyhow!("missing vaccination data"))?
+        / 100_000.0;
+    let progress2 = data
+        .vaccinated_second_per_100k_inhabitants
+        .ok_or_else(|| anyhow!("missing vaccination data"))?
+        / 100_000.0;
+    let n1 = progress1 * 20.0;
+    let n2 = progress2 * 20.0;
+
+    Ok(format!(
+        "1ª dose:\n{}{} {:.01}%\n\n2ª dose:\n{}{} {:.01}%",
+        "▓".repeat(n1 as usize),
+        "░".repeat(20 - (n1 as usize)),
+        progress1 * 100.0,
+        "▓".repeat(n2 as usize),
+        "░".repeat(20 - (n2 as usize)),
+        progress2 * 100.0
+    )
+    .replace(".", ","))
+}
+
 /// Main function. Process arguments.
 // TODO: use `clap`? Seems overkill.
 #[tokio::main]
@@ -288,7 +339,7 @@ async fn main() {
                 log_in().await;
                 return;
             }
-            "-n" =>  {
+            "-n" => {
                 print = true;
             }
             _ => {}
@@ -315,9 +366,14 @@ mod tests {
         let test_csv = include_str!("./testdata/cases-brazil-states.csv");
         let now = chrono::Utc.ymd(2021, 4, 24).and_hms(0, 0, 0);
         let d = get_last_vaccination_data_covid19br(&test_csv, now).unwrap();
-        println!("{} {}", d.0, d.1);
-        assert_eq!(d.0, 39220391);
-        assert_eq!(d.1, 738580);
+        println!("{:?} {} {}", d.0, d.1, d.2);
+        assert_eq!(d.1, 39220391);
+        assert_eq!(d.2, 738580);
+        // assert_eq!(
+        //     d.0.vaccinated_second_per_100k
+        //         .expect("should have vaccination data"),
+        //     5365.29663
+        // );
     }
 
     #[test]
