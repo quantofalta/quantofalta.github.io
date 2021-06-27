@@ -173,14 +173,18 @@ struct RecordCovid19br {
     // tests: Option<u32>,
     // tests_per_100k_inhabitants: Option<f64>,
     vaccinated: Option<u32>,
-    vaccinated_per_100k_inhabitants: Option<f64>,
+    vaccinated_per_100_inhabitants: Option<f64>,
     vaccinated_second: Option<u32>,
-    vaccinated_second_per_100k_inhabitants: Option<f64>,
+    vaccinated_second_per_100_inhabitants: Option<f64>,
+    vaccinated_single: Option<u32>,
+    vaccinated_single_per_100_inhabitants: Option<f64>,
 }
 
 impl RecordCovid19br {
     fn vaccinated_total(&self) -> u32 {
-        self.vaccinated.unwrap_or_default() + self.vaccinated_second.unwrap_or_default()
+        self.vaccinated.unwrap_or_default()
+            + self.vaccinated_second.unwrap_or_default()
+            + (self.vaccinated_single.unwrap_or_default() * 2)
     }
 }
 
@@ -303,24 +307,30 @@ fn format_full_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Du
 }
 
 fn format_progress(data: &RecordCovid19br) -> Result<String> {
+    let progress_single = data
+        .vaccinated_single_per_100_inhabitants
+        .ok_or_else(|| anyhow!("missing vaccination data"))?
+        / 100.0;
     let progress1 = data
-        .vaccinated_per_100k_inhabitants
+        .vaccinated_per_100_inhabitants
         .ok_or_else(|| anyhow!("missing vaccination data"))?
-        / 100_000.0;
+        / 100.0
+        + progress_single;
     let progress2 = data
-        .vaccinated_second_per_100k_inhabitants
+        .vaccinated_second_per_100_inhabitants
         .ok_or_else(|| anyhow!("missing vaccination data"))?
-        / 100_000.0;
-    let n1 = progress1 * 20.0;
-    let n2 = progress2 * 20.0;
+        / 100.0
+        + progress_single;
+    let n1 = std::cmp::min((progress1 * 20.0) as usize, 20);
+    let n2 = std::cmp::min((progress2 * 20.0) as usize, 20);
 
     Ok(format!(
         "1ª dose:\n{}{} {:.01}%\n\n2ª dose:\n{}{} {:.01}%",
         "▓".repeat(n1 as usize),
-        "░".repeat(20 - (n1 as usize)),
+        "░".repeat(20 - n1),
         progress1 * 100.0,
         "▓".repeat(n2 as usize),
-        "░".repeat(20 - (n2 as usize)),
+        "░".repeat(20 - n2),
         progress2 * 100.0
     )
     .replace(".", ","))
