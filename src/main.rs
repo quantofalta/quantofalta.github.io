@@ -183,9 +183,8 @@ struct RecordCovid19br {
 
 impl RecordCovid19br {
     fn vaccinated_total(&self) -> u32 {
-        self.vaccinated.unwrap_or_default()
-            + self.vaccinated_second.unwrap_or_default()
-            + (self.vaccinated_single.unwrap_or_default() * 2)
+        // self.vaccinated.unwrap_or_default()
+        self.vaccinated_second.unwrap_or_default() + (self.vaccinated_single.unwrap_or_default())
     }
 }
 
@@ -243,8 +242,8 @@ fn get_brazil_immunization_estimate(
     daily_vaccinations: u32,
 ) -> chrono::Duration {
     // 90% first dose + 70% second dose
-    let herd_size = ((BRAZIL_POPULATION * 160) / 200) as u32;
-    let doses = std::cmp::max(herd_size * 2 - total_vaccinations, 0);
+    let herd_size = ((BRAZIL_POPULATION * 7) / 10) as u32;
+    let doses = std::cmp::max(herd_size - total_vaccinations, 0);
     let days = doses / daily_vaccinations;
     log::debug!("BRAZIL_POPULATION  = {}; herd_size = {}; total_vaccinations = {}, doses = {}; daily_vaccinations = {}, days = {}",
         BRAZIL_POPULATION, herd_size, total_vaccinations, doses, daily_vaccinations, days);
@@ -302,7 +301,7 @@ fn format_full_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Du
     }
     let s = format_estimate(now, estimate);
     return format!(
-        "No ritmo atual de vacinação, {} para o Brasil se imunizar contra o novo coronavírus.",
+        "No ritmo atual de vacinação, {} para 70% da população brasileira ser imunizada contra o novo coronavírus.",
         s
     );
 }
@@ -378,8 +377,8 @@ mod tests {
         let now = chrono::Utc.ymd(2021, 4, 24).and_hms(0, 0, 0);
         let d = get_last_vaccination_data_covid19br(&test_csv, now).unwrap();
         println!("{:?} {} {}", d.0, d.1, d.2);
-        assert_eq!(d.1, 39220391);
-        assert_eq!(d.2, 738580);
+        assert_eq!(d.1, 11361321);
+        assert_eq!(d.2, 398455);
         // assert_eq!(
         //     d.0.vaccinated_second_per_100k
         //         .expect("should have vaccination data"),
@@ -429,7 +428,7 @@ mod tests {
         let r = format_full_estimate(start, chrono::Duration::days(1));
         assert_eq!(
             r,
-            "No ritmo atual de vacinação, falta 1 dia para o Brasil se imunizar contra o novo coronavírus."
+            "No ritmo atual de vacinação, falta 1 dia para 70% da população brasileira ser imunizada contra o novo coronavírus."
         );
     }
 
