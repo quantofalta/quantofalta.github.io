@@ -31,7 +31,7 @@ jobs:
     - name: Run tests
       run: cargo test --verbose --release
     - name: Tweet
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
       env:
         QUANTOFALTA_APPSECRET: ${{ secrets.QUANTOFALTA_APPSECRET }}
         QUANTOFALTA_USERSECRET: ${{ secrets.QUANTOFALTA_USERSECRET }}
