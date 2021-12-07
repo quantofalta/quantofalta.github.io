@@ -241,7 +241,6 @@ fn get_brazil_immunization_estimate(
     total_vaccinations: u32,
     daily_vaccinations: u32,
 ) -> chrono::Duration {
-    // 90% first dose + 70% second dose
     let herd_size = ((BRAZIL_POPULATION * 7) / 10) as u32;
     let doses = std::cmp::max(herd_size - total_vaccinations, 0);
     let days = doses / daily_vaccinations;
@@ -288,7 +287,7 @@ fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duratio
         3 => format!("{}, {} e {}", vec[0], vec[1], vec[2]),
         _ => unreachable!(),
     };
-    if vec.len() == 1 && &vec[0][0..1] == "1" {
+    if vec.len() == 1 && &vec[0][0..2] == "1 " {
         return format!("falta {}", s);
     }
     return format!("faltam {}", s);
@@ -296,8 +295,8 @@ fn format_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duratio
 
 /// Format the full estimate text that will be tweeted and included in the HTML.
 fn format_full_estimate(now: chrono::DateTime<chrono::Utc>, estimate: chrono::Duration) -> String {
-    if estimate.num_days() == 0 {
-        return "O Brasil está finalmente imunizado!".to_string();
+    if estimate.num_days() <= 0 {
+        return "70% da população brasileira foi imunizada contra o novo coronavírus!".to_string();
     }
     let s = format_estimate(now, estimate);
     return format!(
@@ -404,6 +403,8 @@ mod tests {
         assert_eq!(r, "falta 1 dia");
         let r = format_estimate(start, chrono::Duration::days(2));
         assert_eq!(r, "faltam 2 dias");
+        let r = format_estimate(start, chrono::Duration::days(10));
+        assert_eq!(r, "faltam 10 dias");
         let r = format_estimate(start, chrono::Duration::days(31));
         assert_eq!(r, "falta 1 mês");
         let r = format_estimate(start, chrono::Duration::days(32));
