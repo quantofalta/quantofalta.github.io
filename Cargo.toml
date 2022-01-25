@@ -16,9 +16,6 @@ reqwest = "0.10.10"
 csv = "1.1.6"
 serde = { version = "1", features = ["derive"] }
 chrono = "0.4.19"
-date_component = "0.1"
+date_component = "0.1.4"
 log = "0.4.14"
 env_logger = "0.8.3"
-
-[patch.crates-io]
-date_component = { git = 'https://github.com/conradoplg/date_component', branch = 'fix-another-corner-case' }
