@@ -83,7 +83,7 @@ async fn post_estimate(print: bool) -> Result<()> {
 
     gen_html(&estimate)?;
 
-    let estimate_and_progress = format!("{}\n\n{}", estimate, progress);
+    let estimate_and_progress = progress.to_string();
 
     if print {
         println!("{}", estimate_and_progress);
@@ -95,7 +95,7 @@ async fn post_estimate(print: bool) -> Result<()> {
             .unwrap();
     }
 
-    return Ok(());
+    Ok(())
 }
 
 /// Download vacciation data CSV from Our World in Data.
@@ -107,6 +107,7 @@ async fn download_data() -> Result<String> {
 
 /// Record type for vaccination data from Our World in Data.
 #[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
 struct Record {
     location: String,
     iso_code: String,
@@ -147,6 +148,7 @@ fn get_last_vaccination_data(csv_text: &str, country: &str) -> Result<Record> {
 
 /// Record type for vaccination data from covid19br.
 #[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
 struct RecordCovid19br {
     // epi_week: u32,
     date: String,
@@ -177,6 +179,8 @@ struct RecordCovid19br {
     vaccinated_per_100_inhabitants: Option<f64>,
     vaccinated_second: Option<u32>,
     vaccinated_second_per_100_inhabitants: Option<f64>,
+    vaccinated_third: Option<u32>,
+    vaccinated_third_per_100_inhabitants: Option<f64>,
     vaccinated_single: Option<u32>,
     vaccinated_single_per_100_inhabitants: Option<f64>,
 }
@@ -242,7 +246,7 @@ fn get_brazil_immunization_estimate(
     daily_vaccinations: u32,
 ) -> chrono::Duration {
     let herd_size = ((BRAZIL_POPULATION * 7) / 10) as u32;
-    let doses = std::cmp::max(herd_size - total_vaccinations, 0);
+    let doses = herd_size.saturating_sub(total_vaccinations);
     let days = doses / daily_vaccinations;
     log::debug!("BRAZIL_POPULATION  = {}; herd_size = {}; total_vaccinations = {}, doses = {}; daily_vaccinations = {}, days = {}",
         BRAZIL_POPULATION, herd_size, total_vaccinations, doses, daily_vaccinations, days);
@@ -320,17 +324,25 @@ fn format_progress(data: &RecordCovid19br) -> Result<String> {
         .ok_or_else(|| anyhow!("missing vaccination data"))?
         / 100.0
         + progress_single;
+    let progress3 = data
+        .vaccinated_third_per_100_inhabitants
+        .ok_or_else(|| anyhow!("missing vaccination data"))?
+        / 100.0;
     let n1 = std::cmp::min((progress1 * 20.0) as usize, 20);
     let n2 = std::cmp::min((progress2 * 20.0) as usize, 20);
+    let n3 = std::cmp::min((progress3 * 20.0) as usize, 20);
 
     Ok(format!(
-        "1ª dose:\n{}{} {:.01}%\n\n2ª dose:\n{}{} {:.01}%",
+        "1ª dose:\n{}{} {:.01}%\n\n2ª dose:\n{}{} {:.01}%\n\n3ª dose:\n{}{} {:.01}%",
         "▓".repeat(n1 as usize),
         "░".repeat(20 - n1),
         progress1 * 100.0,
         "▓".repeat(n2 as usize),
         "░".repeat(20 - n2),
-        progress2 * 100.0
+        progress2 * 100.0,
+        "▓".repeat(n3 as usize),
+        "░".repeat(20 - n3),
+        progress3 * 100.0
     )
     .replace(".", ","))
 }
@@ -366,7 +378,7 @@ mod tests {
     #[test]
     fn get_last_vaccination_data_works() {
         let test_csv = include_str!("./testdata/test.csv");
-        let d = get_last_vaccination_data(&test_csv, "Brazil").unwrap();
+        let d = get_last_vaccination_data(test_csv, "Brazil").unwrap();
         assert_eq!(d.daily_vaccinations.unwrap(), 168025);
     }
 
@@ -374,7 +386,7 @@ mod tests {
     fn get_last_vaccination_data_covid19br_works() {
         let test_csv = include_str!("./testdata/cases-brazil-states.csv");
         let now = chrono::Utc.ymd(2021, 4, 24).and_hms(0, 0, 0);
-        let d = get_last_vaccination_data_covid19br(&test_csv, now).unwrap();
+        let d = get_last_vaccination_data_covid19br(test_csv, now).unwrap();
         println!("{:?} {} {}", d.0, d.1, d.2);
         assert_eq!(d.1, 11361321);
         assert_eq!(d.2, 398455);
