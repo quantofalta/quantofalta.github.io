@@ -328,19 +328,19 @@ fn format_progress(data: &RecordCovid19br) -> Result<String> {
         .vaccinated_third_per_100_inhabitants
         .ok_or_else(|| anyhow!("missing vaccination data"))?
         / 100.0;
-    let n1 = std::cmp::min((progress1 * 20.0) as usize, 20);
-    let n2 = std::cmp::min((progress2 * 20.0) as usize, 20);
-    let n3 = std::cmp::min((progress3 * 20.0) as usize, 20);
+    let n1 = std::cmp::min(((progress1 * 100.00).round() / 100.0 * 20.0) as usize, 20);
+    let n2 = std::cmp::min(((progress2 * 100.00).round() / 100.0 * 20.0) as usize, 20);
+    let n3 = std::cmp::min(((progress3 * 100.00).round() / 100.0 * 20.0) as usize, 20);
 
     Ok(format!(
         "1ª dose:\n{}{} {:.01}%\n\n2ª dose:\n{}{} {:.01}%\n\n3ª dose:\n{}{} {:.01}%",
-        "▓".repeat(n1 as usize),
+        "▓".repeat(n1),
         "░".repeat(20 - n1),
         progress1 * 100.0,
-        "▓".repeat(n2 as usize),
+        "▓".repeat(n2),
         "░".repeat(20 - n2),
         progress2 * 100.0,
-        "▓".repeat(n3 as usize),
+        "▓".repeat(n3),
         "░".repeat(20 - n3),
         progress3 * 100.0
     )
